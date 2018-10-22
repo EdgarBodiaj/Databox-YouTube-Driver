@@ -1,5 +1,5 @@
-IMAGE_NAME=go-test-driver
-DEFAULT_REG=toshbrown
+IMAGE_NAME=youtube-history-driver
+DEFAULT_REG=databoxsystems
 VERSION=latest
 
 .PHONY: all

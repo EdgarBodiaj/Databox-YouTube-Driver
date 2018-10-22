@@ -1,7 +1,7 @@
 {
 	"manifest-version": 1,
 
-	"name": "Youtube-History-Driver",
+	"name": "youtube-history-driver",
 	"databox-type": "driver",
 	"version": "0.5.0",
 

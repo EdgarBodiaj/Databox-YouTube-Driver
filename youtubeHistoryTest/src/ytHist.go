@@ -1,17 +1,17 @@
 package main
 
-
 import (
-	"fmt"
-	"net/http"
-	"log"
-	"time"
 	"crypto/tls"
-	"github.com/gorilla/mux"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"encoding/json"
+	"time"
+
+	"github.com/gorilla/mux"
 	libDatabox "github.com/me-box/lib-go-databox"
 )
 
@@ -21,33 +21,55 @@ const testStoreEndpoint = "tcp://127.0.0.1:5555"
 
 var (
 	cmdOut []byte
-	er error
-	History Playlist
-	Indiv Video
-	username string
-	password string
+	er     error
+	Indiv  Video
 )
 
-
-type Playlist struct{
+type Playlist struct {
 	Item []Video `json:"entries"`
-} 
-
-type Video struct{
-	FullTitle string `json:"fulltitle"`
-	Title string `json:"title"`
-	AltTitle string `json:"alt_title"`
-	Dislikes int `json:"dislike_count"`
-	Views int `json:"view_count"`
-	AvgRate float64 `json:"average_rating"`
-	Description string `json:"description"`
-	Tags []string `json:"tags"`
-	Track string `json:"track"`
-	ID string `json:"id"`
-	
 }
 
-func main(){
+type Video struct {
+	FullTitle   string   `json:"fulltitle"`
+	Title       string   `json:"title"`
+	AltTitle    string   `json:"alt_title"`
+	Dislikes    int      `json:"dislike_count"`
+	Views       int      `json:"view_count"`
+	AvgRate     float64  `json:"average_rating"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	Track       string   `json:"track"`
+	ID          string   `json:"id"`
+}
+
+func main() {
+
+	//The endpoints and routing for the UI
+	router := mux.NewRouter()
+	router.HandleFunc("/status", statusEndpoint).Methods("GET")
+	router.PathPrefix("/ui").Handler(http.StripPrefix("/ui", http.FileServer(http.Dir("./htmlPage"))))
+	router.HandleFunc("/info", infoUser)
+	setUpWebServer(true, router, "8080")
+}
+
+func infoUser(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	//Obtain user login details for their youtube account
+	var username string
+	var password string
+	for k, v := range r.Form {
+		if k == "email" {
+			username = strings.Join(v, "")
+		} else {
+			password = strings.Join(v, "")
+		}
+
+	}
+	go doDriverWork(username, password)
+}
+
+func doDriverWork(username string, password string) {
+
 	libDatabox.Info("Starting ....")
 
 	//Are we running inside databox?
@@ -59,7 +81,6 @@ func main(){
 	// and writing in data.
 	var DataboxStoreEndpoint string
 	var storeClient *libDatabox.CoreStoreClient
-	httpServerPort := "8080"
 	if DataboxTestMode {
 		DataboxStoreEndpoint = testStoreEndpoint
 		ac, _ := libDatabox.NewArbiterClient("./", "./", testArbiterEndpoint)
@@ -71,37 +92,6 @@ func main(){
 		storeClient = libDatabox.NewDefaultCoreStoreClient(DataboxStoreEndpoint)
 	}
 
-	if checkInstall(){go doDriverWork(DataboxTestMode, storeClient)}
-	
-	//The endpoints and routing for the UI
-	router := mux.NewRouter()
-	router.HandleFunc("/status", statusEndpoint).Methods("GET")
-	router.PathPrefix("/ui").Handler(http.StripPrefix("/ui", http.FileServer(http.Dir("./htmlPage"))))
-	router.HandleFunc("/info", infoUser)
-	setUpWebServer(true, router, httpServerPort)
-}
-
-func infoUser(w http.ResponseWriter, r *http.Request, ) {
-	r.ParseForm()
-	//Obtain user login details for their youtube account
-	for k, v := range r.Form {
-        	if k == "email" {username = strings.Join(v, "")
-		} else {password = strings.Join(v, "")}
-        	
-    	}
-	
-}
-
-func checkInstall()(exist bool){
-	//Check to see if youtube-dl is installed
-	if _, err := os.Stat("/usr/local/bin/youtube-dl"); os.IsNotExist(err) {
-		fmt.Println("youtube-dl does not exist")
-		os.Exit(3)
-		return false
-	} else {return true}
-}
-
-func doDriverWork(testMode bool, storeClient *libDatabox.CoreStoreClient) {
 	libDatabox.Info("starting doDriverWork")
 
 	//register our datasources
@@ -123,52 +113,80 @@ func doDriverWork(testMode bool, storeClient *libDatabox.CoreStoreClient) {
 	}
 	libDatabox.Info("Registered Datasource")
 
-	cmdName :="youtube-dl"
-	
-	tempUse := ""
-	tempPas := ""
-	libDatabox.Info("Waiting for authentication")
-	for {   tempPas = "-p " + password 
-		tempUse = "-u " + username
-		if tempPas != "-p " && tempUse != "-u "{break}}
+	cmdName := "youtube-dl"
 
-	cmdArgs := []string{tempUse,tempPas,
-				"--skip-download",
-				"-o'%(playlist)s/%(playlist_index)s - %(title)s.%(ext)s'",
-				"--dump-single-json",
-				"--playlist-items",
-				"1-3",
-				"https://www.youtube.com/feed/history"}
-	if cmdOut, er = exec.Command(cmdName, cmdArgs[0], cmdArgs[1], cmdArgs[2], cmdArgs[3], cmdArgs[4], cmdArgs[5], cmdArgs[6], cmdArgs[7]).Output(); er != nil {log.Fatal(er)}
-	//fmt.Println(string(cmdOut))
-
-	err := json.Unmarshal(cmdOut, &History)
-	if err != nil {fmt.Println(err)}
-	
-	temp, tErr := json.Marshal(History)
-	if tErr != nil{log.Fatal(tErr)}
-	libDatabox.Info("Converting data")
-	aerr := storeClient.TSBlobJSON.Write("YoutubeHistory", temp)
-		if aerr != nil {
-			libDatabox.Err("Error Write Datasource " + aerr.Error())
+	tempUse := "-p " + password
+	tempPas := "-u " + username
+	//Create recent store
+	var hOld Playlist
+	for {
+		//Create new var for incoming data
+		var hNew Playlist
+		cmdArgs := []string{tempUse, tempPas,
+			"--skip-download",
+			"-o'%(playlist)s/%(playlist_index)s - %(title)s.%(ext)s'",
+			"--dump-single-json",
+			"--playlist-items",
+			"1-10",
+			"https://www.youtube.com/feed/history"}
+		if cmdOut, er = exec.Command(cmdName, cmdArgs[0], cmdArgs[1], cmdArgs[2], cmdArgs[3], cmdArgs[4], cmdArgs[5], cmdArgs[6], cmdArgs[7]).Output(); er != nil {
+			fmt.Println("er")
+			return
 		}
-		libDatabox.Info("Data written to store: " + string(temp))	
-	libDatabox.Info("Storing data")
-	/*fmt.Println(History.Item[0].Title)
-	fmt.Println(History.Item[0].Tags)
-	fmt.Println(History.Item[0].ID)
-	fmt.Println(History.Item[0].Views)
-	
-	fmt.Println(History.Item[1].Title)
-	fmt.Println(History.Item[1].Tags)
-	fmt.Println(History.Item[1].ID)
-	fmt.Println(History.Item[1].Views)
 
-	fmt.Println(History.Item[2].Title)
-	fmt.Println(History.Item[2].Tags)
-	fmt.Println(History.Item[2].ID)
-	fmt.Println(History.Item[2].Views)*/
-		
+		err := json.Unmarshal(cmdOut, &hNew)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		//Check to see if the recent store is populated
+		//If it has been populated, compare new items with the stored items
+		if hOld.Item != nil {
+			for i := 0; i < len(hNew.Item); i++ {
+				for j := 0; j < len(hOld.Item); j++ {
+					//If a duplicate is found in the recent store, do not save item
+					if hNew.Item[i].ID == hOld.Item[j].ID {
+						break
+					}
+					//If no duplicates have been found in the store, save the item
+					if j == len(hOld.Item)-1 {
+						temp, tErr := json.Marshal(hNew.Item[i])
+						if tErr != nil {
+							fmt.Println("" + tErr.Error())
+							return
+						}
+						aerr := storeClient.TSBlobJSON.Write("YoutubeHistory", temp)
+						if aerr != nil {
+							libDatabox.Err("Error Write Datasource " + aerr.Error())
+						}
+						//libDatabox.Info("Data written to store: " + string(temp))
+						libDatabox.Info("Storing data")
+					}
+				}
+			}
+			//If its the first time the driver has been run, the recent store will be empty
+			//Therefore store the current playlist items
+		} else {
+			for i := 0; i < len(hNew.Item); i++ {
+				temp, tErr := json.Marshal(hNew.Item[i])
+				if tErr != nil {
+					fmt.Println("" + tErr.Error())
+					return
+				}
+				aerr := storeClient.TSBlobJSON.Write("YoutubeHistory", temp)
+				if aerr != nil {
+					libDatabox.Err("Error Write Datasource " + aerr.Error())
+				}
+				//libDatabox.Info("Data written to store: " + string(temp))
+				libDatabox.Info("Storing data")
+			}
+		}
+
+		hOld = hNew
+
+		time.Sleep(time.Second * 30)
+		fmt.Println("New Cycle")
+	}
 }
 
 func statusEndpoint(w http.ResponseWriter, r *http.Request) {
