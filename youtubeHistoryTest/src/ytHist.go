@@ -47,12 +47,13 @@ func main() {
 	//The endpoints and routing for the UI
 	router := mux.NewRouter()
 	router.HandleFunc("/status", statusEndpoint).Methods("GET")
-	router.PathPrefix("/ui").Handler(http.StripPrefix("/ui", http.FileServer(http.Dir("./htmlPage"))))
-	router.HandleFunc("/info", infoUser)
-	setUpWebServer(true, router, "8080")
+	router.HandleFunc("/ui/info", infoUser)
+	router.PathPrefix("/ui").Handler(http.StripPrefix("/ui", http.FileServer(http.Dir("./static"))))
+	setUpWebServer(false, router, "8080")
 }
 
 func infoUser(w http.ResponseWriter, r *http.Request) {
+	libDatabox.Info("Obtained auth")
 	r.ParseForm()
 	//Obtain user login details for their youtube account
 	var username string

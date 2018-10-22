@@ -12,11 +12,13 @@ RUN go get -u github.com/me-box/lib-go-databox
 RUN GGO_ENABLED=0 GOOS=linux go build -a -ldflags '-s -w' -o driver /src/*.go
 
 FROM amd64/alpine:3.8
+
 COPY --from=build /etc/passwd /etc/passwd
-COPY --from=build /driver /driver
 RUN apk update && apk add libzmq
 USER databox
-
+WORKDIR /
+COPY --from=build /driver .
+COPY /static /static
 LABEL databox.type="driver"
 EXPOSE 8080
 CMD ["./driver"]

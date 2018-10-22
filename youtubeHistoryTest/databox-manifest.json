@@ -3,7 +3,7 @@
 
 	"name": "youtube-history-driver",
 	"databox-type": "driver",
-	"version": "0.5.0",
+	"version": "0.5.1",
 
 	"description": "A driver to gather information about your youtube history.",
 	"author": "Edgar Bodiaj <Edgar.Bodiaj@nottingham.ac.uk>",
@@ -13,6 +13,11 @@
 		"driver",
 		"databox"
 	],
+	"homepage": "https://github.com/EdgarBodiaj/yt-test",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/EdgarBodiaj/yt-test"
+	},
 	"resource-requirements": {
 		"store": "core-store"
 	}
