@@ -73,25 +73,11 @@ func doDriverWork(username string, password string) {
 
 	libDatabox.Info("Starting ....")
 
-	//Are we running inside databox?
-	DataboxTestMode := os.Getenv("DATABOX_VERSION") == ""
-
-	// Read in the store endpoint provided by databox
-	// this is a driver so you will get a core-store
-	// and you are responsible for registering datasources
-	// and writing in data.
 	var DataboxStoreEndpoint string
 	var storeClient *libDatabox.CoreStoreClient
-	if DataboxTestMode {
-		DataboxStoreEndpoint = testStoreEndpoint
-		ac, _ := libDatabox.NewArbiterClient("./", "./", testArbiterEndpoint)
-		storeClient = libDatabox.NewCoreStoreClient(ac, "./", DataboxStoreEndpoint, false)
-		//turn on debug output for the databox library
-		libDatabox.OutputDebug(true)
-	} else {
-		DataboxStoreEndpoint = os.Getenv("DATABOX_STORE_ENDPOINT")
-		storeClient = libDatabox.NewDefaultCoreStoreClient(DataboxStoreEndpoint)
-	}
+
+	DataboxStoreEndpoint = os.Getenv("DATABOX_STORE_ENDPOINT")
+	storeClient = libDatabox.NewDefaultCoreStoreClient(DataboxStoreEndpoint)
 
 	libDatabox.Info("starting doDriverWork")
 
