@@ -18,6 +18,16 @@
 		"type": "git",
 		"url": "git+https://github.com/EdgarBodiaj/yt-test"
 	},
+	"external-whitelist": [
+		{
+			"urls": [
+				"https://www.youtube.com/feed/history",
+				"https://accounts.google.com/signin",
+				"https://www.youtube.com",
+				"https://accounts.youtube.com"
+			]
+		}
+	],
 	"resource-requirements": {
 		"store": "core-store"
 	}
