@@ -5,7 +5,8 @@ Data is gathered using [youtube-dl](https://github.com/rg3/youtube-dl/blob/maste
 
 In order for the driver to work, the user needs to input their youtube credentials, which will then be passed to the youtube-dl program in order to obtain the data.
 
-When the metadata is downloaded it is then converted into json format, stripped of unnecessary data and stored into the Time Series blob store (TSBlob).
+When the metadata is downloaded it is then converted into json format, stripped of unnecessary data and stored into the Time Series blob store (TSBlob). 
+Data currently is refreshed every 30 seconds (for testing purposes).
 
 The format of the json data stored is:
 - FullTitle     (The full title of the video)
