@@ -68,8 +68,9 @@ func infoUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	fmt.Fprintf(w, "<h1>Working!!!!<h1>")
+	fmt.Fprintf(w, "<h1>Authenticated and Working<h1>")
 	go doDriverWork(username, password)
+
 }
 
 func doDriverWork(username string, password string) {
@@ -140,8 +141,8 @@ func doDriverWork(username string, password string) {
 		//Check to see if the recent store is populated
 		//If it has been populated, compare new items with the stored items
 		if hOld.Item != nil {
-			fmt.Println("New size " + string(len(hNew.Item)))
-			fmt.Println("Old size " + string(len(hOld.Item)))
+			fmt.Println("New first item is: " + hNew.Item[0].Title)
+			fmt.Println("Old first item is: " + hOld.Item[0].Title)
 			for i := 0; i < len(hNew.Item); i++ {
 				for j := 0; j < len(hOld.Item); j++ {
 					//If a duplicate is found in the recent store, do not save item
@@ -168,12 +169,15 @@ func doDriverWork(username string, password string) {
 			//If its the first time the driver has been run, the recent store will be empty
 			//Therefore store the current playlist items
 		} else {
+			fmt.Println("First case")
 			for i := 0; i < len(hNew.Item); i++ {
 				temp, tErr := json.Marshal(hNew.Item[i])
 				if tErr != nil {
 					fmt.Println("" + tErr.Error())
 					return
 				}
+				fmt.Println(string(temp))
+				libDatabox.Info(string(temp))
 				aerr := storeClient.TSBlobJSON.Write("YoutubeHistory", temp)
 				if aerr != nil {
 					libDatabox.Err("Error Write Datasource " + aerr.Error())
