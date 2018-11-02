@@ -20,15 +20,16 @@ const testArbiterEndpoint = "tcp://127.0.0.1:4444"
 const testStoreEndpoint = "tcp://127.0.0.1:5555"
 
 var (
-	cmdOut []byte
-	er     error
-	Indiv  Video
+	storeClient *libDatabox.CoreStoreClient
+	isRun       = false
 )
 
+//Playlist contains the array of videos from the users history feed
 type Playlist struct {
 	Item []Video `json:"entries"`
 }
 
+//Video contains the video metadata after cleanup
 type Video struct {
 	FullTitle   string   `json:"fulltitle"`
 	Title       string   `json:"title"`
@@ -43,44 +44,21 @@ type Video struct {
 }
 
 func main() {
-
 	DataboxTestMode := os.Getenv("DATABOX_VERSION") == ""
-
+	registerData(DataboxTestMode)
 	//The endpoints and routing for the UI
 	router := mux.NewRouter()
 	router.HandleFunc("/status", statusEndpoint).Methods("GET")
 	router.HandleFunc("/ui/info", infoUser)
+	router.HandleFunc("/ui/saved", infoUser)
 	router.PathPrefix("/ui").Handler(http.StripPrefix("/ui", http.FileServer(http.Dir("./static"))))
 	setUpWebServer(DataboxTestMode, router, "8080")
 }
 
-func infoUser(w http.ResponseWriter, r *http.Request) {
-	libDatabox.Info("Obtained auth")
-	r.ParseForm()
-	//Obtain user login details for their youtube account
-	var username string
-	var password string
-	for k, v := range r.Form {
-		if k == "email" {
-			username = strings.Join(v, "")
-		} else {
-			password = strings.Join(v, "")
-		}
-
-	}
-	fmt.Fprintf(w, "<h1>Authenticated and Working<h1>")
-	go doDriverWork(username, password)
-
-}
-
-func doDriverWork(username string, password string) {
-	DataboxTestMode := os.Getenv("DATABOX_VERSION") == ""
-	libDatabox.Info("Starting ....")
-
+func registerData(testMode bool) {
+	//Setup store client
 	DataboxStoreEndpoint := "tcp://127.0.0.1:5555"
-	var storeClient *libDatabox.CoreStoreClient
-
-	if DataboxTestMode {
+	if testMode {
 		DataboxStoreEndpoint = testStoreEndpoint
 		ac, _ := libDatabox.NewArbiterClient("./", "./", testArbiterEndpoint)
 		storeClient = libDatabox.NewCoreStoreClient(ac, "./", DataboxStoreEndpoint, false)
@@ -90,11 +68,24 @@ func doDriverWork(username string, password string) {
 		DataboxStoreEndpoint = os.Getenv("DATABOX_ZMQ_ENDPOINT")
 		storeClient = libDatabox.NewDefaultCoreStoreClient(DataboxStoreEndpoint)
 	}
-
-	libDatabox.Info("starting doDriverWork")
-
-	//register our datasources
-	//we only need to do this once at start up
+	//Setup authentication datastore
+	authDatasource := libDatabox.DataSourceMetadata{
+		Description:    "Youtube Login Data",       //required
+		ContentType:    libDatabox.ContentTypeTEXT, //required
+		Vendor:         "databox-test",             //required
+		DataSourceType: "loginData",                //required
+		DataSourceID:   "YoutubeHistoryCred",       //required
+		StoreType:      libDatabox.StoreTypeKV,     //required
+		IsActuator:     false,
+		IsFunc:         false,
+	}
+	err := storeClient.RegisterDatasource(authDatasource)
+	if err != nil {
+		libDatabox.Err("Error Registering Credential Datasource " + err.Error())
+		return
+	}
+	libDatabox.Info("Registered Credential Datasource")
+	//Setup datastore for main data
 	testDatasource := libDatabox.DataSourceMetadata{
 		Description:    "Youtube History data",     //required
 		ContentType:    libDatabox.ContentTypeJSON, //required
@@ -105,25 +96,145 @@ func doDriverWork(username string, password string) {
 		IsActuator:     false,
 		IsFunc:         false,
 	}
-	arr := storeClient.RegisterDatasource(testDatasource)
-	if arr != nil {
-		libDatabox.Err("Error Registering Datasource " + arr.Error())
+	err = storeClient.RegisterDatasource(testDatasource)
+	if err != nil {
+		libDatabox.Err("Error Registering Datasource " + err.Error())
 		return
 	}
 	libDatabox.Info("Registered Datasource")
+}
+
+func infoSaved(w http.ResponseWriter, r *http.Request) {
+	tempPas, pErr := storeClient.KVText.Read("YoutubeHistoryCred", "password")
+	if pErr != nil {
+		fmt.Println(pErr.Error())
+		return
+	}
+	if tempPas != nil {
+		libDatabox.Info("Saved auth detected")
+		fmt.Fprintf(w, "<h1>Authenticated and Working<h1>")
+		go doDriverWork()
+	} else {
+		fmt.Fprintf(w, "<h1>No saved auth detected<h1>")
+		return
+	}
+}
+
+func infoCheck() (success bool) {
+	var (
+		temp   Playlist
+		cmdErr []byte
+		er     error
+	)
 
 	cmdName := "youtube-dl"
-	tempUse := "-u " + username
-	tempPas := "-p " + password
-	cmdArgs := []string{tempUse, tempPas,
+	tempUse, uErr := storeClient.KVText.Read("YoutubeHistoryCred", "username")
+	if uErr != nil {
+		fmt.Println(uErr.Error())
+		return
+	}
+
+	tempPas, pErr := storeClient.KVText.Read("YoutubeHistoryCred", "password")
+	if pErr != nil {
+		fmt.Println(pErr.Error())
+		return
+	}
+
+	cmdArgs := []string{("-u " + string(tempUse)), ("-p " + string(tempPas)),
+		"--skip-download",
+		"--dump-single-json",
+		"--playlist-items",
+		"1",
+		"https://www.youtube.com/feed/history"}
+
+	if cmdErr, er = exec.Command(cmdName, cmdArgs[0], cmdArgs[1], cmdArgs[2], cmdArgs[3], cmdArgs[4], cmdArgs[5], cmdArgs[6]).Output(); er != nil {
+		fmt.Println(er.Error())
+		return
+	}
+
+	err := json.Unmarshal(cmdErr, &temp)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	if len(temp.Item) > 0 {
+		success = true
+	} else {
+		success = false
+	}
+
+	return success
+}
+
+func infoUser(w http.ResponseWriter, r *http.Request) {
+	libDatabox.Info("Obtained auth")
+	r.ParseForm()
+	//Obtain user login details for their youtube account
+	for k, v := range r.Form {
+		if k == "email" {
+			err := storeClient.KVText.Write("YoutubeHistoryCred", "username", []byte(strings.Join(v, "")))
+			if err != nil {
+				libDatabox.Err("Error Write Datasource " + err.Error())
+			}
+
+		} else {
+			err := storeClient.KVText.Write("YoutubeHistoryCred", "password", []byte(strings.Join(v, "")))
+			if err != nil {
+				libDatabox.Err("Error Write Datasource " + err.Error())
+			}
+		}
+
+	}
+	//If the driver is already running, do not create a new instance
+	if isRun {
+		fmt.Fprintf(w, "<h1>Already running<h1>")
+		libDatabox.Info("Already running")
+		fmt.Fprintf(w, " <button onclick='goBack()'>Go Back</button><script>function goBack() {	window.history.back();}</script> ")
+	} else {
+
+		if infoCheck() == true {
+			fmt.Fprintf(w, "<h1>Authenticated and Working<h1>")
+			go doDriverWork()
+		} else {
+			fmt.Fprintf(w, "<h1>Bad Auth<h1>")
+			fmt.Fprintf(w, " <button onclick='goBack()'>Go Back</button><script>function goBack() {	window.history.back();}</script> ")
+		}
+
+	}
+
+}
+
+func doDriverWork() {
+	libDatabox.Info("starting doDriverWork")
+	isRun = true
+
+	cmdName := "youtube-dl"
+	tempUse, uErr := storeClient.KVText.Read("YoutubeHistoryCred", "username")
+	if uErr != nil {
+		fmt.Println(uErr.Error())
+		return
+	}
+
+	tempPas, pErr := storeClient.KVText.Read("YoutubeHistoryCred", "password")
+	if pErr != nil {
+		fmt.Println(pErr.Error())
+		return
+	}
+
+	cmdArgs := []string{("-u " + string(tempUse)), ("-p " + string(tempPas)),
 		"--skip-download",
 		"--dump-single-json",
 		"--playlist-items",
 		"1-10",
 		"https://www.youtube.com/feed/history"}
 
-	//Create recent store
-	var hOld Playlist
+	//Create recent store, error object and output
+	var (
+		hOld   Playlist
+		er     error
+		cmdOut []byte
+	)
 	for {
 		//Create new var for incoming data
 		var hNew Playlist
@@ -136,6 +247,11 @@ func doDriverWork(username string, password string) {
 		if err != nil {
 			fmt.Println(err.Error())
 			return
+		}
+
+		if len(hNew.Item) == 0 {
+			isRun = false
+			break
 		}
 
 		//Check to see if the recent store is populated
@@ -161,7 +277,6 @@ func doDriverWork(username string, password string) {
 							libDatabox.Err("Error Write Datasource " + aerr.Error())
 						}
 						//libDatabox.Info("Data written to store: " + string(temp))
-						fmt.Println("Storing data")
 						libDatabox.Info("Storing data")
 					}
 				}
