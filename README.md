@@ -1,12 +1,19 @@
-# Youtube History Driver
+# Databox Youtube History Driver
 
-## Data format
+
 Data is gathered using [youtube-dl](https://github.com/rg3/youtube-dl/blob/master/README.md#readme), a shell based program to download youtube videos and their metadata.
 
 In order for the driver to work, the user needs to input their youtube credentials, which will then be passed to the youtube-dl program in order to obtain the data.
 
 When the metadata is downloaded it is then converted into json format, stripped of unnecessary data and stored into the Time Series blob store (TSBlob). 
 Data currently is refreshed every 30 seconds (for testing purposes).
+
+## Data stores
+The driver has two data stores, one to store user authentication and the other to store video data.
+The authentication data store is a key-value store (KVStore) which holds the users username and password. This allows the user to loging with saved credentials if they wish. The content type that is stored inside the store is text (ContentTypeText).
+The credential store ID is:"YoutubeHistoryCred"
+
+The video data store is a time series blob store (TSBlob), which holds JSON objects that contain information on the stored videos. The content type that is stored is JSON (ContentTypeJSON)
 
 The format of the json data stored is:
 - FullTitle     (The full title of the video)
@@ -20,7 +27,9 @@ The format of the json data stored is:
 - Track         (Any soundtrack used in the video)
 - ID            (Unique ID)
 
-Here is how the data for a single video is stored:
+The video data store ID is: "YoutubeHistory"
+
+## Example data
 ```
 {"fulltitle":"",
   "title":"How Fast Is Red Dead Redemption's Dead Eye?",
