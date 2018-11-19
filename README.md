@@ -11,7 +11,7 @@ Data currently is refreshed every 30 seconds (for testing purposes).
 ## Data stores
 The driver has two data stores, one to store user authentication and the other to store video data.
 ### Credential Store
-The authentication data store is a key-value store (KVStore) which holds the users username and password. This allows the user to loging with saved credentials if they wish. The content type that is stored inside the store is text **(ContentTypeText)**.
+The authentication data store is a key-value store **(KVStore)** which holds the users username and password. This allows the user to loging with saved credentials if they wish. The content type that is stored inside the store is text **(ContentTypeText)**.
 
 The credential store ID is: ***"YoutubeHistoryCred"***
 
