@@ -13,7 +13,7 @@ The driver has two data stores, one to store user authentication and the other t
 ### Credential Store
 The authentication data store is a key-value store (KVStore) which holds the users username and password. This allows the user to loging with saved credentials if they wish. The content type that is stored inside the store is text **(ContentTypeText)**.
 
-The credential store ID is:***"YoutubeHistoryCred"***
+The credential store ID is: ***"YoutubeHistoryCred"***
 
 ### Metadata store
 The video data store is a time series blob store **(TSBlob)**, which holds JSON objects that contain information on the stored videos. The content type that is stored is JSON ***(ContentTypeJSON)***
